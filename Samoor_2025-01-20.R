@@ -4,7 +4,7 @@ library(indicspecies)
 library(tidyverse)
 library(dendextend)
 library(parallel)
-cl <- makeCluster(detectCores()-1)
+# cl <- makeCluster(detectCores()-1)
 theme_set(theme_bw() + theme(legend.position = "bottom"))
 
 long <- readxl::read_excel("Caspian data_2024-07-21_SA.xlsx", sheet = "main") %>% 
@@ -65,7 +65,7 @@ taxa <- readxl::read_excel("Caspian data_2024-07-21_SA.xlsx", sheet = "taxa") %>
             is.na(brackets) ~ paste0(genus, " ", species, " ", author, ", ", year), 
             brackets == 0 ~ paste0(genus, " ", species, " ", author, ", ", year), 
             TRUE ~ paste0(genus, " ", species, " (", author, ", ", year, ")"), 
-            ), 
+        ), 
         .keep = "unused") %>% 
     filter(sp %in% long$sp) %>% 
     select(-cf) %>% 
@@ -148,7 +148,7 @@ cor.pval1 <- expand_grid(v1 = 2:ncol(cor.data1), v2 = 2:ncol(cor.data1)) %>%
 
 if(export){
     pdf(
-        paste0("export/Fig 2. Correlation_by.samples, ", Sys.Date(), ".pdf"), 
+        paste0("export/Fig 2. Correlation_by.samples ", Sys.Date(), ".pdf"), 
         width = 6, height = 4
     )
 }
@@ -279,10 +279,10 @@ abundance <- long %>%
     mutate(
         sp = str_replace_all(sp, "_total", ""),
         sp = factor(sp, levels = c("Collembola", "Astigmata", 
-            "Mesostigmata", "Oribatida", "Prostigmata")))
-    
+                                   "Mesostigmata", "Oribatida", "Prostigmata")))
+
 xaxis <- c("SdJj", "SdEq", "SdTu", "SdEc", "SdTa", "SdJm", "SdFn", 
-    "PbAe", "PbDe", "PbPo", "PbTu", "PbTl", "DuCJ", "DuCS", "RsFd", "Se") 
+           "PbAe", "PbDe", "PbPo", "PbTu", "PbTl", "DuCJ", "DuCS", "RsFd", "Se") 
 
 p4a <- abundance %>% 
     group_by(seria, coast, sp) %>% 
@@ -318,7 +318,7 @@ p4 <- gridExtra::grid.arrange(p4a, p4b, ncol = 1,
                               left = "Total abundance, individuals")
 if(export){
     ggsave(
-        paste0("export/Fig 4. General abundances, ", Sys.Date(), ".pdf"), 
+        paste0("export/Fig 4. General abundances ", Sys.Date(), ".pdf"), 
         plot = p4, 
         width = 297/25, height = 210/25)
 }
@@ -340,12 +340,15 @@ rar <- long %>%
         list(abu = sort(a$abu), 
              s = max(a$s))
     }) %>% 
-    parLapply(cl = cl, ., function(a, export){
+    mclapply(mc.cores = 8, FUN = function(
+        a, 
+        nb = switch(as.character(export), 
+                    "TRUE" = 9999, "FALSE" = 9)
+        ){
         iNEXT::iNEXT( 
             a$abu,
             q=0, 
-            nboot = switch(as.character(export), 
-                "TRUE" = 9999, "FALSE" = 9),
+            nboot = nb,
             datatype="abundance", 
             se = TRUE,
             size = seq(0, a$s, by = 5)) |>
@@ -375,7 +378,8 @@ p5o <- p5o +
                shape = 15, size = 2)
 p5o # without confidence areas
 if(export){
-    ggsave("Fig 5. Rarefication.pdf", width = 297*0.6, height = 150*0.6, units = "mm")
+    ggsave(paste0("export/Fig 5. Rarefication ", Sys.Date(), ".pdf"), 
+           width = 297*0.6, height = 150*0.6, units = "mm")
 }
 
 p5b + # with confidence areas
@@ -426,15 +430,16 @@ dend <- lapply(dis, function(a){
     dend %>% 
         set("labels_col", L$l) %>% 
         set("labels_cex", 0.5)
-    })
+})
 
 # par(mfrow = c(2,2))
 if(export){
-    pdf("Fig 6. Dendrogramms.pdf", width = 7, height = 7)
+    pdf(paste0("export/Fig 6. Dendrogramms ", Sys.Date(), ".pdf"), 
+        width = 7, height = 7)
 }
 plot(dend[[1]],
-    horiz = TRUE, 
-    main = "Order = Oribatida\n Data = binary (Jaccard)\n Method = Ward")
+     horiz = TRUE, 
+     main = "Order = Oribatida\n Data = binary (Jaccard)\n Method = Ward")
 # plot(dend[[2]],
 #      horiz = TRUE, 
 #      main = "Order = Oribatida\n Data = numeric (Bray-Curtis)\n Method = Ward")
@@ -491,7 +496,8 @@ p7 <- div %>%
          y = "Average number of species in seria ± SD")
 p7
 if(export){
-    ggsave("Fig 7. Diversity by series.pdf", p7, width = 297/25, height = 210/25)
+    ggsave(paste0("export/Fig 7. Diversity by series ", Sys.Date(), ".pdf"), 
+           p7, width = 297/25, height = 210/25)
 }
 
 tables$tab.for.fig7 <- div %>% 
@@ -510,19 +516,19 @@ p8 <- rbind(mutate(mswi, Order = "Mesostigmata", .before = 1),
             mutate(orwi, Order = "Oribatida", .before = 1)
             # mutate(rbind(mswi, orwi), .before = 1,
             #        Order = "Oribatida & Mesostigmata")
-            ) %>% 
+) %>% 
     pivot_longer(names_to = "id", values_to = "abu", -Order:-sp) %>% 
     left_join(taxa, by = "sp") %>% 
     filter(range != "unknown" | Order != "Oribatida & Mesostigmata", 
            abu > 0) %>% 
     transmute(
-              seria = substr(id, 1, nchar(id)-1), 
-              range = factor(range, ordered = TRUE, levels = 
-                                 c("(Semi)Cosmopolitan", "Holarctic", "Palaearctic", 
-                                   "European-Caucasian", "Mediterranean-Caucasian",
-                                   "Caspian and/or Caucasian", "unknown")), 
-              id, Order, sp, abu, 
-              fau = case_when(abu > 0 ~ 1, TRUE ~ 0)) %>% 
+        seria = substr(id, 1, nchar(id)-1), 
+        range = factor(range, ordered = TRUE, levels = 
+                           c("(Semi)Cosmopolitan", "Holarctic", "Palaearctic", 
+                             "European-Caucasian", "Mediterranean-Caucasian",
+                             "Caspian and/or Caucasian", "unknown")), 
+        id, Order, sp, abu, 
+        fau = case_when(abu > 0 ~ 1, TRUE ~ 0)) %>% 
     group_by(seria, Order, range) %>% 
     summarise_if(is.numeric, sum) %>% 
     mutate(Community = abu/sum(abu)*100, Fauna = fau/sum(fau)*100, .keep = "unused") %>% 
@@ -530,25 +536,28 @@ p8 <- rbind(mutate(mswi, Order = "Mesostigmata", .before = 1),
     pivot_longer(names_to = "VAR", values_to = "VAL", -1:-3) %>% 
     # filter(order  == "Oribatida & Mesostigmata") %>% 
     ggplot(aes(x = seria, y = VAL, fill = range)) + 
-        geom_col(width = 0.68) + 
-        facet_grid(cols = vars(VAR), rows = vars(Order)) + 
-        scale_fill_manual(values = c(
-            "#0D0786", 
-            "#3FA9F5", 
-            "#79D151", 
-            "#8F2773", 
-            "#FB9009", 
-            "#FCE724", 
-            alpha("white", 0))) +
-        guides(fill = guide_legend(override.aes = list(alpha = 
-            c(1, 1, 1, 1, 1, 1, 0)))) + 
-        scale_y_reverse() +
-        scale_x_discrete(limits = xaxis) +
-        labs(y = "Ratio, %", x = NULL, fill = NULL) + 
-        theme(axis.text.x = element_text(angle = 90))
+    geom_col(width = 0.68) + 
+    facet_grid(cols = vars(VAR), rows = vars(Order)) + 
+    scale_fill_manual(values = c(
+        "#0D0786", 
+        "#3FA9F5", 
+        "#79D151", 
+        "#8F2773", 
+        "#FB9009", 
+        "#FCE724", 
+        alpha("white", 0))) +
+    guides(fill = guide_legend(override.aes = list(alpha = 
+                                                       c(1, 1, 1, 1, 1, 1, 0)))) + 
+    scale_y_reverse() +
+    scale_x_discrete(limits = xaxis) +
+    labs(y = "Ratio, %", x = NULL, fill = NULL) + 
+    theme(axis.text.x = element_text(angle = 90))
 p8
 
-if(export){ggsave("Fig 8. Range compound.pdf", p8, height = 210/40, width = 297/40)}
+if(export){
+    ggsave(paste0("export/Fig 8. Range compound ", Sys.Date(), ".pdf"), 
+           p8, height = 210/40, width = 297/40)
+}
 
 
 # + Рис. 9. ССА распределения видов -----------------------------------------
@@ -574,20 +583,20 @@ comm <- labs %>%
 
 comm <- list(orws = select(orws, -Se, -PbTl, -PbPo),
              msws = select(msws, -Se, -DuCJ, -DuCS, -RsFd)
-    ) %>%
+) %>%
     map(~ .x %>% 
-        select_if(~ !is.numeric(.) || sum(.) > 1) %>% 
-        mutate(total = apply(.[,-1], 1, sum)) %>% 
-        filter(total > limit) %>% ###
-        left_join(select(tables$tab.2_all_species, sp, No.), by = "sp")
+            select_if(~ !is.numeric(.) || sum(.) > 1) %>% 
+            mutate(total = apply(.[,-1], 1, sum)) %>% 
+            filter(total > limit) %>% ###
+            left_join(select(tables$tab.2_all_species, sp, No.), by = "sp")
     ) %>% 
     map(~ .x %>% 
-        column_to_rownames("No.") %>%
-        # column_to_rownames("sp") %>% 
-        select_if(is.numeric) %>% 
-        select(-total) %>% 
-        t %>% 
-        as.data.frame() 
+            column_to_rownames("No.") %>%
+            # column_to_rownames("sp") %>% 
+            select_if(is.numeric) %>% 
+            select(-total) %>% 
+            t %>% 
+            as.data.frame() 
     ) %>% 
     lapply(function(a){
         df0 <- comm[match(rownames(a), rownames(comm)),]
@@ -599,7 +608,7 @@ comm <- list(orws = select(orws, -Se, -PbTl, -PbPo),
     })
 
 if(export){
-    pdf("Fig 9. Canonycal analysis.pdf", height = 7, width = 10)    
+    pdf("export/Fig 9. Canonycal analysis.pdf", height = 7, width = 10)    
 }
 plot(comm[[1]], main = paste0("Oribatida, excl.: Se, PbTl, PbPo; limit = ", limit))
 plot(comm[[2]], main = paste0("Mesostigmata, excl.: Se, DuCJ, DuCS, RsFd; limit = ", limit))
@@ -684,15 +693,16 @@ p10b <- M2 %>%
          subtitle = "B. Coast type") 
 p10 <- gridExtra::grid.arrange(p10a, p10b, ncol = 1) #, left = "Суммарное обилие в серии, экз.")
 if(export){
-    ggsave("Fig 10. Ordination.pdf", p10, width = 210/25, height = 297/25)
+    ggsave(paste0("export/Fig 10. Ordination ", Sys.Date(), ".pdf"), 
+           p10, width = 210/25, height = 297/25)
 }
 
 # PERMANOVA
 PERMANOVA <- expand_grid(id = names(dis),
-    type = c("coast + plants.d", "plants.d + coast")) %>% 
+                         type = c("coast + plants.d", "plants.d + coast")) %>% 
     mutate(no = rep(1:4, each = 2), 
            nm = paste0(id, " ~ ", type))
-    
+
 P <- PERMANOVA %>% 
     split(1:nrow(.)) %>% 
     lapply(function(a){
@@ -716,28 +726,28 @@ tables$tab.5a_permanova <- P %>%
         id, type, Df, SumOfSqs = round(SumOfSqs, 1), 
         R2 = round(R2*100, 1), `F` = round(F, 1), p.value = `Pr(>F)`)
 
-tables$tab.5b_permanova <- tables$tab.5a_permanova %>% 
-    mutate(taxa_type = substr(id, 1, 6)) %>% 
-    split(.$taxa_type) %>% 
-    map(~.x %>% 
-            filter(type != "Total") %>% 
-            group_by(type) %>% 
-            summarise(r = min(R2)) %>% 
-            pivot_wider(names_from = type, values_from = r) %>% 
-            transmute(
-                coast, 
-                plants.d, 
-                variable = 100 - Residual - plants.d - coast, 
-                Residual
-            )
-    ) %>% 
-    map_dfr(rbind, .id = "id")
+# tables$tab.5b_permanova <- tables$tab.5a_permanova %>% 
+#     mutate(taxa_type = substr(id, 1, 6)) %>% 
+#     split(.$taxa_type) %>% 
+#     map(~.x a %>% 
+#             filter(type != "Total") %>% 
+#             group_by(type) %>% 
+#             summarise(r = min(R2)) %>% 
+#             pivot_wider(names_from = type, values_from = r) %>% 
+#             transmute(
+#                 coast, 
+#                 plants.d, 
+#                 variable = 100 - Residual - plants.d - coast, 
+#                 Residual
+#             )
+#     ) %>% 
+#     map_dfr(rbind, .id = "id")
 
 # export tables -----------------------------------------------------------
 tables %>% 
     .[str_detect(names(tables), "tab")] %>% 
     writexl::write_xlsx("samoor_tables.xlsx")
-    
+
 long %>% 
     filter(str_detect(sp, "Zercon"), abu > 0)
 
