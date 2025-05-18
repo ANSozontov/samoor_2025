@@ -347,10 +347,10 @@ rar <- long %>%
         list(abu = sort(a$abu), 
              s = max(a$s))
     }) %>% 
-    mclapply(mc.cores = 8, FUN = function(
+    mclapply(mc.cores = parallel::detectCores(), FUN = function(
         a, 
         nb = switch(as.character(export), 
-                    "TRUE" = 9999, "FALSE" = 9)
+                    "TRUE" = 999, "FALSE" = 9)
         ){
         iNEXT::iNEXT( 
             a$abu,
@@ -753,7 +753,7 @@ tables$tab.5a_permanova <- P %>%
 # export tables -----------------------------------------------------------
 tables %>% 
     .[str_detect(names(tables), "tab")] %>% 
-    writexl::write_xlsx(paste0("Samoor_tables_", Sys.Date(), ".xlsx"))
+    writexl::write_xlsx(paste0("export/samoor_tables_", Sys.Date(), ".xlsx"))
 
 long %>% 
     filter(str_detect(sp, "Zercon"), abu > 0)
